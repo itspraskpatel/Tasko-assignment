@@ -2,134 +2,81 @@ import prisma from "@/db/client/prismaClient"
 import { authOptions } from "@/app/api/lib/auth"
 import { getServerSession } from "next-auth/next"
 
-export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
+
+export async function GET(req: Request) {
   try {
-    const { id } = await params
-    const task = await prisma.task.findUnique({
-      where: { id }
+    const { searchParams } = new URL(req.url)
+    const projectId = searchParams.get("projectId") as string
+
+    const tasks = await prisma.task.findMany({
+      where: { projectId },
+      include: {
+        assignee: {
+          select: { id: true, name: true, email: true }
+        }
+      }
     })
 
-    return Response.json(task)
+    return Response.json(tasks)
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Failed to load task"
+    const message = error instanceof Error ? error.message : "Failed to load tasks"
     return Response.json({ error: message }, { status: 500 })
   }
 }
 
-export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
+
+export async function POST(req: Request) {
   try {
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) {
       return Response.json({ error: "Unauthorized" }, { status: 401 })
     }
     const body = await req.json().catch(() => ({}))
-    if (body?.status && !["TODO", "IN_PROGRESS", "DONE", "IN_REVIEW"].includes(body.status)) {
-      return Response.json({ error: "Invalid status" }, { status: 400 })
+    const title = typeof body?.title === "string" ? body.title.trim() : ""
+    const projectId = typeof body?.projectId === "string" ? body.projectId : ""
+    const dueDate = typeof body?.dueDate === "string" ? new Date(body.dueDate) : undefined
+    const priority = typeof body?.priority === "string" ? body.priority : undefined
+    const validPriority = priority && ["LOW", "MEDIUM", "HIGH", "URGENT"].includes(priority)
+
+    if (!title || !projectId) {
+      return Response.json({ error: "Title and projectId are required" }, { status: 400 })
     }
 
-    const { id } = await params
-    const existing = await prisma.task.findUnique({
-      where: { id },
-      select: { id: true, projectId: true, assigneeId: true }
-    })
-
-    if (!existing) {
-      return Response.json({ error: "Task not found" }, { status: 404 })
-    }
-
-    if (body?.status) {
-      // Only the task assignee or a project admin can change status
-      const isAssignee = session.user.id === existing.assigneeId;
-      if (!isAssignee) {
-        const projectMember = await prisma.projectMember.findUnique({
-          where: {
-            userId_projectId: {
-              userId: session.user.id,
-              projectId: existing.projectId,
-            }
-          },
-          select: { role: true }
-        });
-
-        const isAdmin = projectMember?.role === 'ADMIN';
-        if (!isAdmin) {
-          return Response.json({ error: 'Forbidden: only the assignee or a project admin can change task status' }, { status: 403 });
-        }
-      }
-    }
-
-    if (Object.prototype.hasOwnProperty.call(body, "assigneeId")) {
-      const targetAssigneeId = body.assigneeId
-      if (targetAssigneeId) {
-        const validAssignee = await prisma.project.findFirst({
-          where: {
-            id: existing.projectId,
-            OR: [
-              { ownerId: targetAssigneeId },
-              { members: { some: { userId: targetAssigneeId } } }
-            ]
-          },
-          select: { id: true }
-        })
-        if (!validAssignee) {
-          return Response.json({ error: "Assignee must be a project member" }, { status: 400 })
-        }
-      }
-    }
-
-    const updated = await prisma.task.update({
-      where: { id },
-      data: body
-    })
-
-    return Response.json(updated)
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Failed to update task"
-    return Response.json({ error: message }, { status: 500 })
-  }
-}
-
-export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  try {
-    const session = await getServerSession(authOptions)
-    if (!session?.user?.id) {
-      return Response.json({ error: "Unauthorized" }, { status: 401 })
-    }
-    const { id } = await params
-    //only allow delete if user is project owner or admin
-
-    const project = await prisma.task.findUnique({
-      where: {
-        id: (await params).id
-      },
-      select: {
-        projectId: true
-      }
-    })
-    if (!project) return Response.json({ error: "Task not found" }, { status: 404 })
-    const checkIfProjectMember = await prisma.projectMember.findUnique({
-      where: {
-        userId_projectId: {
-          userId: session.user.id,
-          projectId: project?.projectId
+    if (body?.assigneeId) {
+      const validAssignee = await prisma.project.findFirst({
+        where: {
+          id: projectId,
+          OR: [
+            { ownerId: body.assigneeId },
+            { members: { some: { userId: body.assigneeId } } }
+          ]
         },
-        OR: [
-          { role: "ADMIN" },]
+        select: { id: true,ownerId: true }
+      })
+      if (!validAssignee) {
+        return Response.json({ error: "Assignee must be a project member" }, { status: 400 })
+      }
+      if(validAssignee.ownerId !== session.user.id) {
+        // Only project owner can assign tasks to others
+        return Response.json({ error: "Only project owner can assign tasks" }, { status: 403 })
+      }
+    }
+
+
+    const task = await prisma.task.create({
+      data: {
+        title,
+        projectId,
+        dueDate: dueDate && !Number.isNaN(dueDate.getTime()) ? dueDate : undefined,
+        priority: validPriority ? priority : undefined,
+        creatorId: session.user.id,
+        assigneeId: body.assigneeId
       }
     })
-    if (!checkIfProjectMember) {
-      return Response.json(
-        { error: "You need to be Admin to perform this action" },
-        { status: 403 }
-      )
-    }
-    await prisma.task.delete({
-      where: { id }
-    })
 
-    return Response.json({ success: true, message: "Deleted" })
+    return Response.json(task)
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Failed to delete task"
+    const message = error instanceof Error ? error.message : "Failed to create task"
     return Response.json({ error: message }, { status: 500 })
   }
 }
