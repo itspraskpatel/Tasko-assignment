@@ -51,12 +51,17 @@ export async function POST(req: Request) {
             { members: { some: { userId: body.assigneeId } } }
           ]
         },
-        select: { id: true }
+        select: { id: true,ownerId: true }
       })
       if (!validAssignee) {
         return Response.json({ error: "Assignee must be a project member" }, { status: 400 })
       }
+      if(validAssignee.ownerId !== session.user.id) {
+        // Only project owner can assign tasks to others
+        return Response.json({ error: "Only project owner can assign tasks" }, { status: 403 })
+      }
     }
+
 
     const task = await prisma.task.create({
       data: {
