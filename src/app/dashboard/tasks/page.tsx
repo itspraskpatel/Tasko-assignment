@@ -6,6 +6,9 @@ import { KanbanBoard } from '@/components/tasks/KanbanBoard';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import ReactMarkdown from "react-markdown"
+
+
 import {
   Dialog,
   DialogContent,
@@ -24,7 +27,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Plus } from 'lucide-react';
+import { Plus, Sparkles } from 'lucide-react';
+import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip';
 
 type ApiProject = {
   id: string;
@@ -62,6 +66,9 @@ export default function TasksPage() {
   const [createError, setCreateError] = useState('');
   const [creating, setCreating] = useState(false);
   const [taskActionError, setTaskActionError] = useState('');
+  const [summaryOpen, setSummaryOpen] = useState(false);
+  const [summaryLoading, setSummaryLoading] = useState(false);
+  const [summaryResult, setSummaryResult] = useState<string | null>(null);
 
   useEffect(() => {
     fetch('/api/projects', { credentials: 'include' })
@@ -314,6 +321,45 @@ export default function TasksPage() {
             <Plus size={18} />
             Add Task
           </Button>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  className="rounded-xl gap-2 h-11 px-4 font-semibold"
+                  variant="outline"
+                  onClick={async () => {
+                    if (!selectedProjectId) {
+                      setSummaryResult('Select a project first');
+                      setSummaryOpen(true);
+                      return;
+                    }
+                    setSummaryOpen(true);
+                    setSummaryLoading(true);
+                    setSummaryResult(null);
+                    try {
+                      const res = await fetch('/api/ai', {
+                        method: 'POST',
+                        credentials: 'include',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ projectId: selectedProjectId }),
+                      });
+                      const payload = await res.json().catch(() => ({}));
+                      setSummaryResult(payload?.summary ?? JSON.stringify(payload));
+                    } catch (e) {
+                      setSummaryResult('Failed to get summary');
+                    } finally {
+                      setSummaryLoading(false);
+                    }
+                  }}
+                  disabled={loadingProjects || !selectedProjectId}
+                  aria-label="Summarize project"
+                >
+                  <Sparkles size={18} className="text-primary" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="top">Summarize project</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
           <Dialog
             open={createOpen}
             onOpenChange={(open) => {
@@ -381,6 +427,28 @@ export default function TasksPage() {
               </form>
             </DialogContent>
           </Dialog>
+            <Dialog open={summaryOpen} onOpenChange={(open) => { setSummaryOpen(open); if (!open) setSummaryResult(null); }}>
+              <DialogContent className="sm:max-w-[520px]">
+                <DialogHeader>
+                  <DialogTitle>Project summary</DialogTitle>
+                  <DialogDescription>
+                    {summaryLoading ? 'Generating summary...' : 'Summary for the selected project.'}
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="p-4">
+                  {summaryLoading ? (
+                    <p>Loading...</p>
+                  ) : (
+                    <div className="max-h-[60vh] overflow-y-auto">
+                      <ReactMarkdown>{summaryResult ?? 'No summary available.'}</ReactMarkdown>
+                    </div>
+                  )}
+                </div>
+                <DialogFooter>
+                  <Button onClick={() => setSummaryOpen(false)}>Close</Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
         </div>
       </div>
 

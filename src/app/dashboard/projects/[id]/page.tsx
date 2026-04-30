@@ -10,6 +10,9 @@ import {
   Users, 
   ArrowLeft,
 } from 'lucide-react';
+import { Sparkles } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip';
 import Link from 'next/link';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
@@ -50,6 +53,9 @@ export default function ProjectPage() {
   const [creating, setCreating] = useState(false);
   const [taskActionError, setTaskActionError] = useState('');
   const [memberOpen, setMemberOpen] = useState(false);
+  const [summaryOpen, setSummaryOpen] = useState(false);
+  const [summaryLoading, setSummaryLoading] = useState(false);
+  const [summaryResult, setSummaryResult] = useState<string | null>(null);
   const [members, setMembers] = useState<Array<{ id: string; userId: string; role: string; user: { id: string; name: string; email: string; image?: string | null } }>>([]);
   const [membersLoading, setMembersLoading] = useState(false);
   const [membersError, setMembersError] = useState('');
@@ -399,6 +405,13 @@ export default function ProjectPage() {
             <Badge variant="outline" className="rounded-lg bg-white">
               {isCompleted ? 'Completed' : 'In Progress'}
             </Badge>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      
+                    </TooltipTrigger>
+                  </Tooltip>
+                </TooltipProvider>
           </div>
           <p className="text-lg text-muted-foreground max-w-2xl">{project.description}</p>
           <div className="flex items-center gap-6 pt-2 border-2 p-2 rounded-3xl">
@@ -422,6 +435,25 @@ export default function ProjectPage() {
               </div>
             </div>
           </div>
+          <Dialog open={summaryOpen} onOpenChange={(open) => { setSummaryOpen(open); if (!open) setSummaryResult(null); }}>
+            <DialogContent className="sm:max-w-[520px]">
+              <DialogHeader>
+                <DialogTitle>Project summary</DialogTitle>
+                <DialogDescription>
+                  {summaryLoading ? 'Generating summary...' : 'Summary for this project.'}
+                </DialogDescription>
+              </DialogHeader>
+              <div className="p-4">
+                {summaryLoading ? (
+                  <p>Loading...</p>
+                ) : (
+                  <div className="max-h-[60vh] overflow-y-auto">
+                    <ReactMarkdown>{summaryResult ?? 'No summary available.'}</ReactMarkdown>
+                  </div>
+                )}
+              </div>
+            </DialogContent>
+          </Dialog>
         </div>
 
         <div className="flex items-center gap-3">
@@ -432,6 +464,44 @@ export default function ProjectPage() {
             <Plus size={18} />
             Add Task
           </Button>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      className="rounded-xl gap-2 h-11 px-4 font-semibold m-4"
+                      variant="outline"
+                      onClick={async () => {
+                        if (!projectId) {
+                          setSummaryResult('Project id missing');
+                          setSummaryOpen(true);
+                          return;
+                        }
+                        setSummaryOpen(true);
+                        setSummaryLoading(true);
+                        setSummaryResult(null);
+                        try {
+                          const res = await fetch('/api/ai', {
+                            method: 'POST',
+                            credentials: 'include',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ projectId }),
+                          });
+                          const payload = await res.json().catch(() => ({}));
+                          setSummaryResult(payload?.summary ?? JSON.stringify(payload));
+                        } catch (e) {
+                          setSummaryResult('Failed to get summary');
+                        } finally {
+                          setSummaryLoading(false);
+                        }
+                      }}
+                      aria-label="Summarize project"
+                    >
+                      <Sparkles size={18} className="text-primary" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top">Summarize project</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
         </div>
       </div>
 

@@ -116,7 +116,7 @@ export function TaskCard({
           </div>
         </div>
         
-        <h4 className="text-sm font-medium leading-tight">{title}</h4>
+        <h4 className="text-sm font-medium leading-tight whitespace-normal break-words">{title}</h4>
 
         
         <div className="flex items-center justify-between pt-2">

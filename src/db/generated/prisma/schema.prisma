@@ -26,7 +26,6 @@ model User {
   memberships   ProjectMember[]
   assignedTasks Task[]          @relation("TaskAssignee")
   createdTasks  Task[]          @relation("TaskCreator")
-  comments      Comment[]
 }
 
 model Project {
@@ -69,28 +68,14 @@ model Task {
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
 
-  project  Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  assignee User?     @relation("TaskAssignee", fields: [assigneeId], references: [id])
-  creator  User      @relation("TaskCreator", fields: [creatorId], references: [id])
-  comments Comment[]
+  project  Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  assignee User?   @relation("TaskAssignee", fields: [assigneeId], references: [id])
+  creator  User    @relation("TaskCreator", fields: [creatorId], references: [id])
 
   @@index([projectId])
   @@index([assigneeId])
   @@index([status])
   @@index([dueDate]) // indexing for fast overdue queries
-}
-
-model Comment {
-  id        String   @id @default(cuid())
-  body      String
-  taskId    String
-  authorId  String
-  createdAt DateTime @default(now())
-
-  task   Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  author User @relation(fields: [authorId], references: [id])
-
-  @@index([taskId])
 }
 
 enum Role {

@@ -161,14 +161,6 @@ exports.Prisma.TaskScalarFieldEnum = {
   updatedAt: 'updatedAt'
 };
 
-exports.Prisma.CommentScalarFieldEnum = {
-  id: 'id',
-  body: 'body',
-  taskId: 'taskId',
-  authorId: 'authorId',
-  createdAt: 'createdAt'
-};
-
 exports.Prisma.SortOrder = {
   asc: 'asc',
   desc: 'desc'
@@ -206,8 +198,7 @@ exports.Prisma.ModelName = {
   User: 'User',
   Project: 'Project',
   ProjectMember: 'ProjectMember',
-  Task: 'Task',
-  Comment: 'Comment'
+  Task: 'Task'
 };
 
 /**
